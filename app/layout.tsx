@@ -1,0 +1,1 @@
+import"./globals.css";export const metadata={title:"Deal Factory Matching",description:"Buyer seller inventory matching"};export default function Layout({children}:{children:React.ReactNode}){return<html lang="en"><body>{children}</body></html>}
