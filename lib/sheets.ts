@@ -1,8 +1,57 @@
-import {google} from "googleapis";import type{Row}from"./matching";
-const buyerId=process.env.BUYER_SPREADSHEET_ID!,managementId=process.env.MANAGEMENT_SPREADSHEET_ID!;
-function auth(){const email=process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,key=process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY?.replace(/\\n/g,"\n");if(!email||!key)throw new Error("Google service account is not configured");return new google.auth.JWT({email,key,scopes:["https://www.googleapis.com/auth/spreadsheets"]})}
-function rows(v:string[][]=[]):Row[]{if(v.length<2)return[];const h=v[0];return v.slice(1).filter(r=>r.some(Boolean)).map(r=>Object.fromEntries(h.map((x,i)=>[x,r[i]??""])))}
-async function read(id:string,range:string){const s=google.sheets({version:"v4",auth:auth()});const r=await s.spreadsheets.values.get({spreadsheetId:id,range});return(r.data.values||[])as string[][]}
-export async function loadAll(){const[b,s,o]=await Promise.all([read(buyerId,"'Form Responses 1'!A:AA"),read(managementId,"'Seller Directory'!A:Q"),read(managementId,"'Inventory Offers'!A:N")]);return{buyers:rows(b),sellers:rows(s),offers:rows(o)}}
-export async function overwriteMatches(v:string[][]){const s=google.sheets({version:"v4",auth:auth()});await s.spreadsheets.values.clear({spreadsheetId:managementId,range:"'Buyer Matching'!A:M"});await s.spreadsheets.values.update({spreadsheetId:managementId,range:"'Buyer Matching'!A1",valueInputOption:"RAW",requestBody:{values:v}})}
-export async function appendLog(v:string[]){const s=google.sheets({version:"v4",auth:auth()});await s.spreadsheets.values.append({spreadsheetId:managementId,range:"'Match Log'!A:F",valueInputOption:"RAW",insertDataOption:"INSERT_ROWS",requestBody:{values:[v]}})}
+import { google } from "googleapis";
+import type { Row } from "./matching";
+import type { SheetConnection } from "./sheet-connection";
+
+function auth(connection: SheetConnection) {
+  return new google.auth.JWT({
+    email: connection.email,
+    key: connection.privateKey.replace(/\\n/g, "\n"),
+    scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+  });
+}
+
+function rows(values: string[][] = []): Row[] {
+  if (values.length < 2) return [];
+  const headers = values[0];
+  return values
+    .slice(1)
+    .filter((row) => row.some(Boolean))
+    .map((row) => Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ""])));
+}
+
+async function read(connection: SheetConnection, spreadsheetId: string, range: string) {
+  const sheets = google.sheets({ version: "v4", auth: auth(connection) });
+  const response = await sheets.spreadsheets.values.get({ spreadsheetId, range });
+  return (response.data.values || []) as string[][];
+}
+
+export async function loadAll(connection: SheetConnection) {
+  const [buyers, sellers, offers] = await Promise.all([
+    read(connection, connection.buyerSpreadsheetId, "'Form Responses 1'!A:AA"),
+    read(connection, connection.managementSpreadsheetId, "'Seller Directory'!A:Q"),
+    read(connection, connection.managementSpreadsheetId, "'Inventory Offers'!A:N"),
+  ]);
+  return { buyers: rows(buyers), sellers: rows(sellers), offers: rows(offers) };
+}
+
+export async function overwriteMatches(connection: SheetConnection, values: string[][]) {
+  const sheets = google.sheets({ version: "v4", auth: auth(connection) });
+  await sheets.spreadsheets.values.clear({ spreadsheetId: connection.managementSpreadsheetId, range: "'Buyer Matching'!A:M" });
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: connection.managementSpreadsheetId,
+    range: "'Buyer Matching'!A1",
+    valueInputOption: "RAW",
+    requestBody: { values },
+  });
+}
+
+export async function appendLog(connection: SheetConnection, values: string[]) {
+  const sheets = google.sheets({ version: "v4", auth: auth(connection) });
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: connection.managementSpreadsheetId,
+    range: "'Match Log'!A:F",
+    valueInputOption: "RAW",
+    insertDataOption: "INSERT_ROWS",
+    requestBody: { values: [values] },
+  });
+}
